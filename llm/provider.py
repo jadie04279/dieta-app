@@ -3,8 +3,8 @@ LLM provider abstraction layer.
 generate_json(prompt) -> dict  is the single interface used by all callers.
 
 Priority order:
-  1. LLM_PROVIDER env var ("gemini" | "claude")
-  2. Whichever API key is present
+  1. LLM_PROVIDER env var ("groq" | "gemini" | "claude")
+  2. Whichever API key is present (groq → gemini → claude)
   3. NoLLMProvider (offline fallback — callers must handle None return)
 """
 from __future__ import annotations
@@ -58,6 +58,25 @@ class LLMProvider(ABC):
     @property
     def available(self) -> bool:
         return True
+
+
+# ── Groq ─────────────────────────────────────────────────────────────────────
+
+class GroqProvider(LLMProvider):
+    MODEL = "llama-3.3-70b-versatile"
+
+    def __init__(self, api_key: str):
+        from groq import Groq
+        self._client = Groq(api_key=api_key)
+
+    def _call(self, prompt: str) -> str:
+        response = self._client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+        return response.choices[0].message.content
 
 
 # ── Gemini ───────────────────────────────────────────────────────────────────
@@ -117,9 +136,18 @@ def get_provider(force_refresh: bool = False) -> LLMProvider:
     if _cached_provider is not None and not force_refresh:
         return _cached_provider
 
-    preferred = os.getenv("LLM_PROVIDER", "gemini").lower()
+    preferred = os.getenv("LLM_PROVIDER", "groq").lower()
+    groq_key   = os.getenv("GROQ_API_KEY", "")
     gemini_key = os.getenv("GEMINI_API_KEY", "")
-    claude_key  = os.getenv("ANTHROPIC_API_KEY", "")
+    claude_key = os.getenv("ANTHROPIC_API_KEY", "")
+
+    def _try_groq():
+        if groq_key:
+            try:
+                return GroqProvider(groq_key)
+            except Exception:
+                pass
+        return None
 
     def _try_gemini():
         if gemini_key:
@@ -138,9 +166,11 @@ def get_provider(force_refresh: bool = False) -> LLMProvider:
         return None
 
     if preferred == "claude":
-        provider = _try_claude() or _try_gemini()
-    else:
-        provider = _try_gemini() or _try_claude()
+        provider = _try_claude() or _try_groq() or _try_gemini()
+    elif preferred == "gemini":
+        provider = _try_gemini() or _try_groq() or _try_claude()
+    else:  # groq (default)
+        provider = _try_groq() or _try_gemini() or _try_claude()
 
     _cached_provider = provider or NoLLMProvider()
     return _cached_provider
@@ -152,6 +182,7 @@ def provider_status() -> dict:
     return {
         "available": p.available,
         "type": type(p).__name__,
+        "groq_key_set":   bool(os.getenv("GROQ_API_KEY")),
         "gemini_key_set": bool(os.getenv("GEMINI_API_KEY")),
         "claude_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
     }

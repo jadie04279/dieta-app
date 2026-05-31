@@ -179,12 +179,13 @@ ps1, ps2, ps3 = st.columns(3)
 ps1.metric("사용 가능", "✅ 예" if status["available"] else "❌ 아니오")
 ps2.metric("제공자",    status["type"])
 ps3.metric("API 키",
+           ("Groq ✅" if status.get("groq_key_set") else "Groq ❌") + " / " +
            ("Gemini ✅" if status["gemini_key_set"] else "Gemini ❌") + " / " +
            ("Claude ✅" if status["claude_key_set"] else "Claude ❌"))
 
 if not status["available"]:
     st.warning(
-        "LLM이 설정되지 않았습니다. `.env` 파일에 `GEMINI_API_KEY` 또는 `ANTHROPIC_API_KEY`를 설정하면 "
+        "LLM이 설정되지 않았습니다. Streamlit Secrets에 `GROQ_API_KEY`를 설정하면 "
         "AI 식단 파싱 및 식단 제안 기능이 활성화됩니다. 현재는 규칙 기반 폴백으로 동작합니다."
     )
 else:
