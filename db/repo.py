@@ -9,6 +9,7 @@ import os
 import datetime as _dt
 from pathlib import Path
 from typing import Optional
+import streamlit as st
 
 _DB_PATH     = Path(__file__).parent.parent / "data" / "app.db"
 _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
@@ -182,6 +183,7 @@ def _seed_foods(conn: _Conn) -> None:
 # Profile
 # ---------------------------------------------------------------------------
 
+@st.cache_data(ttl=300)
 def get_profile() -> Optional[dict]:
     conn = get_connection()
     row = conn.execute("SELECT * FROM profile WHERE id=1").fetchone()
@@ -221,6 +223,7 @@ def upsert_profile(data: dict) -> None:
                 list(values.values()),
             )
     conn.close()
+    get_profile.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -288,8 +291,11 @@ def upsert_daily_log(data: dict) -> None:
             values,
         )
     conn.close()
+    get_daily_log.clear()
+    get_recent_logs.clear()
 
 
+@st.cache_data(ttl=60)
 def get_daily_log(log_date: str) -> Optional[dict]:
     conn = get_connection()
     row  = conn.execute("SELECT * FROM daily_log WHERE date=?", (log_date,)).fetchone()
@@ -322,6 +328,7 @@ def list_daily_logs(start_date: str, end_date: str) -> list[dict]:
     return rows
 
 
+@st.cache_data(ttl=60)
 def get_recent_logs(days: int = 30) -> list[dict]:
     conn = get_connection()
     rows = conn.execute(
@@ -382,6 +389,7 @@ def get_weekly_plan(week_start: str) -> Optional[dict]:
     return row
 
 
+@st.cache_data(ttl=300)
 def get_latest_weekly_plan() -> Optional[dict]:
     conn = get_connection()
     row  = conn.execute("SELECT * FROM weekly_plan ORDER BY week_start DESC LIMIT 1").fetchone()
@@ -421,6 +429,7 @@ def save_goal_schedule(data: dict) -> int:
     return row["id"] if row else -1
 
 
+@st.cache_data(ttl=300)
 def get_latest_goal_schedule() -> Optional[dict]:
     conn = get_connection()
     row  = conn.execute("SELECT * FROM goal_schedule ORDER BY created_at DESC LIMIT 1").fetchone()
@@ -476,6 +485,7 @@ def get_foods_for_planner(max_kcal_per_100g: float = 600, limit: int = 100) -> l
     return rows
 
 
+@st.cache_data(ttl=3600)
 def get_all_foods() -> list[dict]:
     conn = get_connection()
     rows = conn.execute("SELECT * FROM foods ORDER BY category, name").fetchall()
@@ -494,6 +504,7 @@ def get_met_value(activity_key: str) -> Optional[dict]:
     return row
 
 
+@st.cache_data(ttl=3600)
 def get_all_met_values() -> list[dict]:
     conn = get_connection()
     rows = conn.execute("SELECT * FROM met_values ORDER BY category, name").fetchall()
