@@ -77,30 +77,53 @@ def _keyword_meal_match(user_text: str, all_foods: list[dict]) -> list[dict]:
     """Keyword fallback: search foods by name tokens in user text."""
     results: list[dict] = []
     seen_ids: set[int] = set()
-    food_by_name = {f["name"]: f for f in all_foods}
 
-    # Detect meal from text
-    meal = "breakfast"
-    for m, keywords in MEAL_KEYWORDS.items():
-        if any(k in user_text for k in keywords):
-            meal = m
-            break
+    # Tokenize user text to prevent partial matches (e.g. "배" inside "곱배기")
+    text_tokens = set(re.split(r"[,，、\s\d]+", user_text))
 
-    # Try to match food names
+    # Detect meal per-sentence (아침→breakfast, 저녁→dinner, etc.)
+    def _detect_meal(segment: str) -> str:
+        for m, keywords in MEAL_KEYWORDS.items():
+            if any(k in segment for k in keywords):
+                return m
+        return "breakfast"
+
+    # Split text into meal segments by sentence delimiters
+    segments = re.split(r"[,，.。]+", user_text)
+
+    # Build meal map: token → meal
+    token_meal: dict[str, str] = {}
+    for seg in segments:
+        meal = _detect_meal(seg)
+        for tok in re.split(r"[\s\d]+", seg):
+            if tok:
+                token_meal[tok] = meal
+
+    # Try to match food names as whole tokens only
     for food in all_foods:
         if food["id"] in seen_ids:
             continue
         name = food["name"]
-        # Remove parentheses for matching
         clean = re.sub(r"[\(（].*?[\)）]", "", name).strip()
-        if clean and clean in user_text:
+        if clean and clean in text_tokens:
             grams = _default_grams(food)
+            # Apply portion multipliers from user text
+            if any(w in user_text for w in ["곱배기", "곱빼기"]):
+                grams = round(grams * 1.7, 0)
+            elif "2인분" in user_text:
+                grams = round(grams * 2.0, 0)
+            elif "3인분" in user_text:
+                grams = round(grams * 3.0, 0)
+            elif any(w in user_text for w in ["대자", "큰 것", "큰것"]):
+                grams = round(grams * 1.5, 0)
+            # Detect meal from surrounding sentence
+            meal = token_meal.get(clean, "breakfast")
             results.append({
                 "food_id":    food["id"],
                 "name":       food["name"],
                 "grams":      grams,
                 "meal":       meal,
-                "confidence": 0.6,
+                "confidence": 0.7,
                 "source":     "fallback",
             })
             seen_ids.add(food["id"])
@@ -155,12 +178,14 @@ def parse_meals(
             if food["id"] not in cand_ids and tok in food["name"]:
                 candidates.append(food)
                 cand_ids.add(food["id"])
-    # Always include common staples
+    # Always include Korean restaurant menus + common staples
     for food in all_foods:
-        if food["id"] not in cand_ids and food["category"] in ("곡류", "달걀/유제품", "채소"):
+        if food["id"] not in cand_ids and food["category"] in (
+            "한식 메뉴", "국/찌개", "곡류", "달걀/유제품", "채소"
+        ):
             candidates.append(food)
             cand_ids.add(food["id"])
-        if len(candidates) >= 60:
+        if len(candidates) >= 80:
             break
 
     provider = get_provider()
