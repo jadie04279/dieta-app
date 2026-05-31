@@ -31,7 +31,7 @@ def _save_and_go(d: dict, goal_line: dict, mode: str):
     st.session_state.onboard_data = {}
     st.success("시작합니다!")
     st.balloons()
-    st.rerun()
+    st.switch_page("pages/today.py")
 
 
 st.markdown("## 프로필 설정")

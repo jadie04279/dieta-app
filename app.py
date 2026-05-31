@@ -13,7 +13,7 @@ try:
         if isinstance(_v, str):
             os.environ.setdefault(_k, _v)
 except Exception:
-    pass  # secrets not available in local dev without secrets.toml
+    pass
 
 from db.repo import init_db, get_profile
 
@@ -34,57 +34,53 @@ def _inject_css() -> None:
 
 _inject_css()
 
+# 사이드바 완전히 숨김
+st.markdown("""
+<style>
+[data-testid="stSidebarNav"] {display: none !important;}
+section[data-testid="stSidebar"] {display: none !important;}
+</style>
+""", unsafe_allow_html=True)
+
 # ── DB init (idempotent) ────────────────────────────────────────────────────
 init_db()
 
-# ── Navigation ──────────────────────────────────────────────────────────────
-PAGES = {
-    "오늘":    "pages/today.py",
-    "추세":    "pages/trends.py",
-    "주간 계획": "pages/weekly.py",
-    "리포트":  "pages/report.py",
-    "설정":    "pages/settings.py",
-}
-
+# ── Routing ─────────────────────────────────────────────────────────────────
 profile = get_profile()
 
-# If no profile yet, redirect to onboarding
 if not profile:
-    import importlib.util, sys
-
-    onboarding_path = Path(__file__).parent / "pages" / "onboarding.py"
-    spec = importlib.util.spec_from_file_location("onboarding", onboarding_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # 온보딩
+    pg = st.navigation(
+        [st.Page("pages/onboarding.py", title="프로필 설정")],
+        position="hidden",
+    )
 else:
-    # Bottom tab navigation
-    tab_labels = list(PAGES.keys())
-    default_idx = 0
+    NAV = [
+        ("오늘",      "pages/today.py"),
+        ("추세",      "pages/trends.py"),
+        ("주간 계획",  "pages/weekly.py"),
+        ("리포트",    "pages/report.py"),
+        ("설정",      "pages/settings.py"),
+    ]
+    all_pages = [st.Page(path, title=label) for label, path in NAV]
+    pg = st.navigation(all_pages, position="hidden")
 
-    if "active_tab" not in st.session_state:
-        st.session_state.active_tab = tab_labels[0]
-
-    cols = st.columns(len(tab_labels))
-    for i, (label, col) in enumerate(zip(tab_labels, cols)):
-        with col:
+    # ── 하단 탭 내비게이션 ──────────────────────────────────────────────────
+    cols = st.columns(len(NAV))
+    for i, (label, path) in enumerate(NAV):
+        with cols[i]:
+            is_active = (pg.title == label)
             if st.button(
                 label,
-                key=f"nav_{label}",
+                key=f"nav_{i}",
                 use_container_width=True,
-                type="primary" if st.session_state.active_tab == label else "secondary",
+                type="primary" if is_active else "secondary",
             ):
-                st.session_state.active_tab = label
-                st.rerun()
+                st.switch_page(path)
 
     st.divider()
 
-    active = st.session_state.active_tab
-    page_path = Path(__file__).parent / PAGES[active]
-
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(active, page_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+pg.run()
 
 # ── Disclaimer ─────────────────────────────────────────────────────────────
 st.markdown(
