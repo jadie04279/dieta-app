@@ -3,6 +3,7 @@ Today page: daily targets + natural-language meal/exercise logging with parse co
 """
 import streamlit as st
 from datetime import date
+from core.utils import today as _today
 
 from db.repo import (
     get_profile, get_daily_log, upsert_daily_log,
@@ -20,7 +21,7 @@ from core.log_parser import (
 from core.planner import calc_item_nutrition
 
 profile   = get_profile()
-today_str = str(date.today())
+today_str = str(_today())
 log       = get_daily_log(today_str) or {}
 
 # ── 목표 계산 ─────────────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ else:
     est_tdee        = adjusted["tdee"]
 
 if goal_line:
-    gt = goal_daily_target(goal_line, date.today())
+    gt = goal_daily_target(goal_line, _today())
     target_weight_today = gt.get("target_weight") if gt else None
 else:
     target_weight_today = None
@@ -74,7 +75,7 @@ exercise_pct = min(100, actual_exercise / target_exercise * 100) if target_exerc
 DOW = ["월","화","수","목","금","토","일"]
 st.markdown(
     f"## 오늘 &nbsp;<span style='font-size:14px;color:var(--text-secondary)'>"
-    f"{date.today().strftime('%Y년 %m월 %d일')} ({DOW[date.today().weekday()]})</span>",
+    f"{_today().strftime('%Y년 %m월 %d일')} ({DOW[_today().weekday()]})</span>",
     unsafe_allow_html=True,
 )
 

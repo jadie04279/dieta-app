@@ -7,6 +7,7 @@ Two-step flow using session_state:
 import streamlit as st
 import json
 from datetime import date, timedelta
+from core.utils import today as _today
 from db.repo import upsert_profile, add_health_check, upsert_daily_log, save_goal_schedule
 
 
@@ -18,11 +19,11 @@ def _save_and_go(d: dict, goal_line: dict, mode: str):
         "macro_carb_pct": 50, "macro_prot_pct": 30, "macro_fat_pct": 20,
         "food_prefs_json": {"allergies": [], "dislikes": [], "cuisine": "korean"},
     })
-    upsert_daily_log({"date": str(date.today()), "weight_kg": d["current_weight"]})
+    upsert_daily_log({"date": str(_today()), "weight_kg": d["current_weight"]})
 
     hd = d.get("health_data", {})
     if any((hd.get(k) or 0) > 0 for k in ["fasting_glucose", "sbp", "ldl", "triglyceride"]):
-        hd["date"] = str(date.today())
+        hd["date"] = str(_today())
         add_health_check(hd)
 
     save_goal_schedule(goal_line)
@@ -53,7 +54,7 @@ if st.session_state.onboard_step == 1:
             birth_date = st.date_input("생년월일",
                 value=date(1992, 1, 1),
                 min_value=date(1924, 1, 1),
-                max_value=date.today() - timedelta(days=365 * 16))
+                max_value=_today() - timedelta(days=365 * 16))
         with c2:
             height_cm = st.number_input("키 (cm)", 100.0, 250.0, 163.0, 0.5)
             current_weight = st.number_input("현재 체중 (kg)", 30.0, 300.0, 65.0, 0.5)
@@ -74,8 +75,8 @@ if st.session_state.onboard_step == 1:
             goal_weight = st.number_input("목표 체중 (kg)", 30.0, 300.0, 58.0, 0.5)
         with c4:
             target_date = st.date_input("목표 날짜",
-                value=date.today() + timedelta(weeks=16),
-                min_value=date.today() + timedelta(weeks=4))
+                value=_today() + timedelta(weeks=16),
+                min_value=_today() + timedelta(weeks=4))
 
         st.markdown("### 건강검진 수치 (선택)")
         with st.expander("건강검진 수치 입력"):
@@ -132,15 +133,15 @@ elif st.session_state.onboard_step == 2:
     from core.safety import bmi as calc_bmi
 
     # Build both modes for comparison
-    gl_safe  = build_goal_line(d["current_weight"], date.today(),
+    gl_safe  = build_goal_line(d["current_weight"], _today(),
                                d["goal_weight"], d["target_date"],
                                d["sex"], d["height_cm"], mode="rate_safe")
-    gl_fixed = build_goal_line(d["current_weight"], date.today(),
+    gl_fixed = build_goal_line(d["current_weight"], _today(),
                                d["goal_weight"], d["target_date"],
                                d["sex"], d["height_cm"], mode="deadline_fixed")
 
     total_loss = d["current_weight"] - d["goal_weight"]
-    available_weeks = (date.fromisoformat(d["target_date"]) - date.today()).days / 7
+    available_weeks = (date.fromisoformat(d["target_date"]) - _today()).days / 7
     feasible = gl_safe["feasible"]
 
     st.markdown("### 목표 분석 결과")

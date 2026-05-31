@@ -4,6 +4,7 @@ Weekly plan page: targets, safety flags, goal trajectory, meal plan suggestion, 
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import date, timedelta
+from core.utils import today as _today
 import json
 
 from db.repo import (
@@ -84,7 +85,7 @@ with tab_goal:
     if goal_line and goal_line.get("weekly_targets_json"):
         st.markdown("### 목표선 주차별 계획")
         weekly   = goal_line["weekly_targets_json"]
-        today_str = str(date.today())
+        today_str = str(_today())
         rows = []
         for i, entry in enumerate(weekly[:16]):
             ws = entry.get("week_start", "")
@@ -204,7 +205,7 @@ with tab_meal:
             )
 
         if st.button("📥 이 식단을 주간 계획에 저장", key="save_meal_plan"):
-            week_start = str(date.today())
+            week_start = str(_today())
             base = plan or {}
             upsert_weekly_plan({
                 "week_start":            week_start,
@@ -272,7 +273,7 @@ with tab_ex:
                         st.caption(f"• {f['message']}")
 
         if st.button("📥 이 운동 계획을 주간 계획에 저장", key="save_ex_plan"):
-            week_start = str(date.today())
+            week_start = str(_today())
             base = plan or {}
             upsert_weekly_plan({
                 "week_start":            week_start,

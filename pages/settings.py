@@ -4,6 +4,7 @@ Settings page: profile, macros, food preferences, LLM status, health check input
 import streamlit as st
 import json
 from datetime import date, timedelta
+from core.utils import today as _today
 from db.repo import get_profile, upsert_profile, add_health_check, get_latest_health_check
 
 st.markdown("## 설정")
@@ -57,7 +58,7 @@ with st.form("settings_form"):
         target_date_val = (
             date.fromisoformat(profile["target_date"])
             if profile.get("target_date")
-            else date.today() + timedelta(weeks=12)
+            else _today() + timedelta(weeks=12)
         )
         target_date = st.date_input("목표 날짜", value=target_date_val)
 
@@ -130,7 +131,7 @@ if latest_hc:
     st.info(f"가장 최근 기록: {latest_hc.get('date', '—')} (공복혈당 {latest_hc.get('fasting_glucose') or '—'} mg/dL)")
 
 with st.form("health_check_form"):
-    hc_date = st.date_input("검사 날짜", value=date.today())
+    hc_date = st.date_input("검사 날짜", value=_today())
 
     hc1, hc2, hc3 = st.columns(3)
     with hc1:

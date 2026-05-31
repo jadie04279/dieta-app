@@ -3,6 +3,7 @@ Weekly report: goal progress, TDEE estimation, plan history, safety flags, healt
 """
 import streamlit as st
 from datetime import date
+from core.utils import today as _today
 import pandas as pd
 
 from db.repo import (
@@ -46,7 +47,7 @@ remaining       = (total_to_lose - cumulative_loss)       if (total_to_lose and 
 days_left = None
 if projected_date:
     try:
-        days_left = (date.fromisoformat(projected_date) - date.today()).days
+        days_left = (date.fromisoformat(projected_date) - _today()).days
     except Exception:
         pass
 
@@ -61,7 +62,7 @@ if pct_done is not None:
     st.progress(min(1.0, pct_done / 100), text=f"목표 달성 {pct_done:.0f}%")
 
 if goal_line and latest_trend:
-    gt = goal_daily_target(goal_line, date.today())
+    gt = goal_daily_target(goal_line, _today())
     tw = gt.get("target_weight") if gt else None
     if tw:
         diff = latest_trend - tw
@@ -196,7 +197,7 @@ recs: list[str] = []
 if cumulative_loss is not None and total_to_lose and total_to_lose > 0 and goal_line and logs:
     try:
         total_days   = (date.fromisoformat(target_date) - date.fromisoformat(goal_line["start_date"])).days
-        elapsed_days = (date.today() - date.fromisoformat(goal_line["start_date"])).days
+        elapsed_days = (_today() - date.fromisoformat(goal_line["start_date"])).days
         expected_frac = min(1.0, elapsed_days / total_days) if total_days > 0 else 0
         actual_frac   = cumulative_loss / total_to_lose
         if actual_frac < expected_frac * 0.6 and expected_frac > 0.1:

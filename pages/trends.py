@@ -6,6 +6,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import date, timedelta
+from core.utils import today as _today
 
 from db.repo import (
     get_profile, get_recent_logs, get_latest_goal_schedule,
@@ -276,7 +277,7 @@ if run_rebalance:
 
         # Save new weekly plan
         from datetime import date as _date
-        week_start = str(_date.today())
+        week_start = str(_today())
         upsert_weekly_plan({
             "week_start": week_start,
             "est_tdee": nw["est_tdee"],
