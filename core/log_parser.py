@@ -165,8 +165,54 @@ def parse_meals(
     from core.planner import calc_item_nutrition
 
     food_db = {f["id"]: f for f in all_foods}
+    text_tokens = set(re.split(r"[,，、\s]+", user_text))
 
-    # Build candidate subset: keyword pre-filter
+    # ── Step 1: 음식명 정확 매칭 (LLM 오매핑 방지) ──────────────────────────
+    # 사용자 텍스트에 DB 음식명이 정확히 포함되면 바로 매핑
+    def _portion_mult(ctx: str) -> float:
+        if any(w in ctx for w in ["곱배기", "곱빼기"]):
+            return 1.7
+        if "2인분" in ctx:
+            return 2.0
+        if "3인분" in ctx:
+            return 3.0
+        if any(w in ctx for w in ["대자", "큰것", "큰 것"]):
+            return 1.5
+        if any(w in ctx for w in ["소자", "반", "작은"]):
+            return 0.5
+        return 1.0
+
+    def _detect_meal_ctx(token: str) -> str:
+        idx = user_text.find(token)
+        ctx = user_text[max(0, idx - 20):idx + 20]
+        for m, kws in MEAL_KEYWORDS.items():
+            if any(k in ctx for k in kws):
+                return m
+        return "breakfast"
+
+    exact_items: list[dict] = []
+    exact_ids: set[int] = set()
+    for food in all_foods:
+        clean = re.sub(r"[\(（].*?[\)）]", "", food["name"]).strip()
+        if len(clean) < 2 or food["id"] in exact_ids:
+            continue
+        if clean in text_tokens:
+            base = _default_grams(food)
+            # 해당 음식 전후 문맥에서 분량 배수 추출
+            idx = user_text.find(clean)
+            ctx = user_text[max(0, idx - 10):idx + len(clean) + 10]
+            grams = round(base * _portion_mult(ctx), 0)
+            nutr = calc_item_nutrition(food, grams)
+            nutr["meal"]       = _detect_meal_ctx(clean)
+            nutr["confidence"] = 0.95
+            nutr["source"]     = "exact"
+            exact_items.append(nutr)
+            exact_ids.add(food["id"])
+
+    if exact_items:
+        return exact_items
+
+    # ── Step 2: LLM 분석 (정확 매칭 실패 시) ────────────────────────────────
     tokens = re.split(r"[,，、\s]+", user_text)
     candidates = []
     cand_ids: set[int] = set()
@@ -178,7 +224,6 @@ def parse_meals(
             if food["id"] not in cand_ids and tok in food["name"]:
                 candidates.append(food)
                 cand_ids.add(food["id"])
-    # Always include Korean restaurant menus + common staples
     for food in all_foods:
         if food["id"] not in cand_ids and food["category"] in (
             "한식 메뉴", "국/찌개", "곡류", "달걀/유제품", "채소"
@@ -190,7 +235,6 @@ def parse_meals(
 
     provider = get_provider()
     raw_items: list[dict] = []
-    source = "fallback"
 
     if provider.available and candidates:
         prompt = _build_meal_parse_prompt(user_text, candidates)
@@ -205,7 +249,6 @@ def parse_meals(
                     nutr["confidence"] = float(item.get("confidence", 0.8))
                     nutr["source"]     = "llm"
                     raw_items.append(nutr)
-            source = "llm"
 
     if not raw_items:
         for item in _keyword_meal_match(user_text, all_foods):
