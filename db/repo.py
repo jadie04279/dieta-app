@@ -264,19 +264,26 @@ def upsert_daily_log(data: dict) -> None:
         if isinstance(data.get(field), (list, dict)):
             data[field] = json.dumps(data[field], ensure_ascii=False)
 
-    fields = [
+    all_fields = [
         "date", "weight_kg", "intake_kcal", "exercise_kcal",
         "intake_raw", "intake_items_json",
         "exercise_raw", "exercise_items_json", "adherence",
     ]
-    values = [data.get(f) for f in fields]
-    conn   = get_connection()
+    # 전달된 필드만 INSERT/UPDATE — None 필드는 건드리지 않아 기존 데이터 보존
+    present = ["date"] + [f for f in all_fields if f != "date" and data.get(f) is not None]
+    values  = [data.get(f) for f in present]
+    update_fields = [f for f in present if f != "date"]
+
+    if not update_fields:
+        return
+
+    conn = get_connection()
     with conn:
         conn.execute(
-            f"""INSERT INTO daily_log({','.join(fields)}, updated_at)
-                VALUES({','.join('?'*len(fields))}, datetime('now'))
+            f"""INSERT INTO daily_log({','.join(present)}, updated_at)
+                VALUES({','.join('?'*len(present))}, datetime('now'))
                 ON CONFLICT(date) DO UPDATE SET
-                {', '.join(f"{f}=excluded.{f}" for f in fields if f != 'date')},
+                {', '.join(f"{f}=excluded.{f}" for f in update_fields)},
                 updated_at=datetime('now')""",
             values,
         )
