@@ -223,68 +223,122 @@ with tab_meal:
 
 # ── Tab 3: Exercise plan ──────────────────────────────────────────────────────
 with tab_ex:
-    if "weekly_exercise_plan" not in st.session_state:
-        st.session_state.weekly_exercise_plan = None
+    from db.repo import get_all_met_values
 
-    ex_targets = {
-        "target_exercise_kcal": plan["target_exercise_kcal"] if plan else 1400.0,
-    }
+    weekly_ex_target = plan["target_exercise_kcal"] if plan else 1400.0
 
-    hflags_for_ex = check_health_flags(health) if health else []
+    DAY_KO = {"monday":"월","tuesday":"화","wednesday":"수",
+              "thursday":"목","friday":"금","saturday":"토","sunday":"일"}
+    DAY_KEYS = list(DAY_KO.keys())
 
-    ex_col1, ex_col2 = st.columns([1, 2])
-    with ex_col1:
-        ex_gen_btn = st.button("🏃 운동 계획 생성", type="primary", use_container_width=True)
-    with ex_col2:
-        sessions = st.number_input("주당 운동 횟수", min_value=2, max_value=7, value=4, step=1, key="ex_sessions")
+    st.markdown(f"### 주간 운동 계획 &nbsp;<span style='font-size:13px;color:var(--text-secondary)'>주간 목표 {weekly_ex_target:.0f} kcal</span>", unsafe_allow_html=True)
 
-    if ex_gen_btn:
-        with st.spinner("운동 계획 생성 중..."):
-            from core.planner import generate_exercise_plan
-            ep = generate_exercise_plan(ex_targets, current_w, hflags_for_ex, int(sessions))
-        st.session_state.weekly_exercise_plan = ep
-        st.rerun()
+    # ── 1. 요일 선택 ─────────────────────────────────────────────────────────
+    st.markdown("**① 운동할 요일 선택**")
+    day_cols = st.columns(7)
+    selected_days: list[str] = []
+    for i, (key, label) in enumerate(DAY_KO.items()):
+        default = key in ("monday","wednesday","friday")
+        if day_cols[i].checkbox(f"**{label}**", value=default, key=f"day_{key}"):
+            selected_days.append(key)
 
-    ep = st.session_state.weekly_exercise_plan
-    if ep:
-        DAY_KO = {
-            "monday": "월", "tuesday": "화", "wednesday": "수",
-            "thursday": "목", "friday": "금", "saturday": "토", "sunday": "일",
-        }
-        for session in ep.get("sessions", []):
-            day_label = DAY_KO.get(session["day"], session["day"])
-            acts      = session["activities"]
-            sess_kcal = sum(a["kcal"] for a in acts)
-            with st.expander(f"**{day_label}요일** — {sess_kcal:.0f} kcal", expanded=True):
-                for act in acts:
-                    ac1, ac2, ac3, ac4 = st.columns([3, 1, 1, 1])
-                    ac1.markdown(f"**{act['name']}**")
-                    ac2.markdown(f"{act['minutes']}분")
-                    ac3.markdown(f"MET {act['met']:.1f}")
-                    ac4.markdown(f"{act['kcal']:.0f} kcal")
+    if not selected_days:
+        st.warning("운동할 요일을 1개 이상 선택하세요.")
+        st.stop()
 
-        total_kcal = ep.get("weekly_total_kcal", 0)
-        st.markdown(f"**주간 합계: {total_kcal:.0f} kcal** (목표 {ex_targets['target_exercise_kcal']:.0f} kcal)")
+    session_target = weekly_ex_target / len(selected_days)
+    st.caption(f"선택 {len(selected_days)}일 → 세션당 목표 {session_target:.0f} kcal")
 
-        if hflags_for_ex:
-            with st.expander("적용된 건강 제약"):
-                for f in hflags_for_ex:
-                    if f.get("modifier"):
-                        st.caption(f"• {f['message']}")
+    # ── 2. 운동 종목 선택 ────────────────────────────────────────────────────
+    st.markdown("**② 종목 선택 및 시간 설정** (선택한 모든 운동일에 동일 적용)")
 
-        if st.button("📥 이 운동 계획을 주간 계획에 저장", key="save_ex_plan"):
-            week_start = str(_today())
+    all_mets = get_all_met_values()
+    cats = {}
+    for m in all_mets:
+        cats.setdefault(m["category"], []).append(m)
+
+    # 카테고리 순서
+    cat_order = ["유산소", "근력", "스포츠", "수중운동", "일상활동"]
+    sorted_cats = [c for c in cat_order if c in cats] + [c for c in cats if c not in cat_order]
+
+    selected_acts: list[dict] = []
+    cat_tabs = st.tabs([f"🏷️ {c}" for c in sorted_cats])
+
+    for cat_tab, cat in zip(cat_tabs, sorted_cats):
+        with cat_tab:
+            items = sorted(cats[cat], key=lambda x: x["met"])
+            for m in items:
+                col_chk, col_name, col_met, col_min, col_kcal = st.columns([0.5, 3, 1, 1.5, 1.5])
+                checked = col_chk.checkbox("", key=f"act_{m['activity_key']}", label_visibility="collapsed")
+                col_name.markdown(f"**{m['name']}**")
+                col_met.caption(f"MET {m['met']:.1f}")
+                mins = col_min.number_input("분", min_value=10, max_value=120, value=30, step=5,
+                                            key=f"min_{m['activity_key']}", label_visibility="collapsed",
+                                            disabled=not checked)
+                if checked and mins > 0:
+                    kcal = round(m["met"] * current_w * (mins / 60.0), 1)
+                    col_kcal.markdown(f"**{kcal:.0f}** kcal")
+                    selected_acts.append({
+                        "activity_key": m["activity_key"],
+                        "name": m["name"],
+                        "minutes": mins,
+                        "met": m["met"],
+                        "kcal": kcal,
+                    })
+                else:
+                    col_kcal.caption("—")
+
+    # ── 3. 세션 요약 & 저장 ─────────────────────────────────────────────────
+    st.divider()
+    session_kcal = sum(a["kcal"] for a in selected_acts)
+    total_weekly  = session_kcal * len(selected_days)
+    diff = total_weekly - weekly_ex_target
+    diff_color = "var(--positive)" if abs(diff) <= weekly_ex_target * 0.15 else ("var(--warning)" if diff < 0 else "var(--danger)")
+
+    st.markdown(f"""
+<div class="diet-card">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:13px;color:var(--text-secondary)">세션당 소모</div>
+      <div style="font-size:22px;font-weight:700">{session_kcal:.0f} kcal</div>
+      <div style="font-size:12px;color:var(--text-secondary)">{len(selected_days)}일 × {session_kcal:.0f} = 주간 {total_weekly:.0f} kcal</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:13px;color:var(--text-secondary)">목표 대비</div>
+      <div style="font-size:22px;font-weight:700;color:{diff_color}">{diff:+.0f} kcal</div>
+      <div style="font-size:12px;color:var(--text-secondary)">목표 {weekly_ex_target:.0f} kcal/주</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    if selected_acts:
+        st.markdown("**선택된 운동 세션 미리보기:**")
+        for a in selected_acts:
+            st.markdown(f"- {a['name']} {a['minutes']}분 → **{a['kcal']:.0f} kcal**")
+
+        if st.button("📥 이 운동 계획으로 저장", type="primary", use_container_width=True, key="save_ex_plan"):
+            sessions_list = [
+                {"day": day, "activities": selected_acts}
+                for day in selected_days
+            ]
+            ep = {
+                "sessions": sessions_list,
+                "weekly_total_kcal": round(total_weekly, 1),
+            }
             base = plan or {}
             upsert_weekly_plan({
-                "week_start":            week_start,
-                "est_tdee":              base.get("est_tdee", 2000.0),
-                "target_intake_kcal":    base.get("target_intake_kcal", 1800.0),
-                "target_exercise_kcal":  ex_targets["target_exercise_kcal"],
-                "planned_loss_kg":       base.get("planned_loss_kg", 0.5),
-                "exercise_json":         ep,
-                "flags_json":            base.get("flags_json", []),
+                "week_start":           str(_today()),
+                "est_tdee":             base.get("est_tdee", 2000.0),
+                "target_intake_kcal":   base.get("target_intake_kcal", 1800.0),
+                "target_exercise_kcal": weekly_ex_target,
+                "planned_loss_kg":      base.get("planned_loss_kg", 0.5),
+                "exercise_json":        ep,
+                "flags_json":           base.get("flags_json", []),
             })
-            st.success("운동 계획이 저장되었습니다.")
+            from db.repo import get_latest_weekly_plan
+            get_latest_weekly_plan.clear()
+            st.success(f"운동 계획 저장 완료 — 주간 {total_weekly:.0f} kcal ({len(selected_days)}일)")
+            st.rerun()
     else:
-        st.info("'운동 계획 생성' 버튼을 눌러 주간 운동 플랜을 만드세요.")
-        st.caption("운동 강도 제한: 건강 검사에서 고혈압·당뇨 지표가 있으면 자동 조정됩니다.")
+        st.info("종목을 1개 이상 선택하세요.")

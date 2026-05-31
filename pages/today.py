@@ -28,10 +28,31 @@ log       = get_daily_log(today_str) or {}
 plan      = get_latest_weekly_plan()
 goal_line = get_latest_goal_schedule()
 
+_DAY_EN = ["monday","tuesday","wednesday","thursday","friday","saturday","sunday"]
+_today_day = _DAY_EN[_today().weekday()]
+
 if plan:
-    target_intake   = plan["target_intake_kcal"]
-    target_exercise = plan["target_exercise_kcal"] / 7
-    est_tdee        = plan["est_tdee"]
+    target_intake = plan["target_intake_kcal"]
+    est_tdee      = plan["est_tdee"]
+
+    # 저장된 운동 계획에서 오늘 세션 찾기
+    ex_json = plan.get("exercise_json") or {}
+    _today_session = None
+    if isinstance(ex_json, dict) and ex_json.get("sessions"):
+        for _s in ex_json["sessions"]:
+            if _s.get("day") == _today_day:
+                _today_session = _s
+                break
+
+    if _today_session:
+        target_exercise = sum(a.get("kcal", 0) for a in _today_session.get("activities", []))
+        is_rest_day = False
+    elif ex_json.get("sessions"):
+        target_exercise = 0.0
+        is_rest_day = True   # 계획은 있으나 오늘은 휴식일
+    else:
+        target_exercise = plan["target_exercise_kcal"] / 7  # 계획 없으면 일평균
+        is_rest_day = False
 else:
     recent    = get_recent_logs(14)
     enriched  = ewma_trend_weights(recent) if recent else []
@@ -44,6 +65,7 @@ else:
     target_intake   = adjusted["target_intake_kcal"]
     target_exercise = adjusted["target_exercise_kcal"] / 7
     est_tdee        = adjusted["tdee"]
+    is_rest_day     = False
 
 if goal_line:
     gt = goal_daily_target(goal_line, _today())
@@ -81,9 +103,9 @@ st.markdown(
 
 # ── 오늘의 목표 카드 ──────────────────────────────────────────────────────────
 intake_color  = "var(--danger)" if intake_pct >= 100 else ("var(--warning)" if intake_pct >= 80 else "var(--positive)")
-ex_color      = "var(--positive)" if exercise_pct >= 100 else ("var(--warning)" if exercise_pct >= 50 else "var(--danger)")
+ex_color      = "var(--positive)" if exercise_pct >= 100 else ("var(--warning)" if exercise_pct >= 50 else ("var(--text-secondary)" if is_rest_day else "var(--danger)"))
 intake_label  = f"+{actual_intake-target_intake:.0f} 초과" if actual_intake > target_intake else f"여유 {target_intake-actual_intake:.0f}"
-ex_label      = "목표 달성 🎉" if actual_exercise >= target_exercise else f"남은 {target_exercise-actual_exercise:.0f}"
+ex_label      = "휴식일 😴" if is_rest_day else ("목표 달성 🎉" if actual_exercise >= target_exercise else f"남은 {target_exercise-actual_exercise:.0f}")
 intake_pending_note  = " ✏️미저장" if _pending_meals and not log.get("intake_kcal") else ""
 ex_pending_note      = " ✏️미저장" if _pending_ex and not log.get("exercise_kcal") else ""
 
