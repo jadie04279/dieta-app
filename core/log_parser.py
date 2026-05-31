@@ -44,15 +44,17 @@ MEAL_KEYWORDS = {
 # ── Meal parsing ─────────────────────────────────────────────────────────────
 
 def _build_meal_parse_prompt(user_text: str) -> str:
-    """AI가 음식명·분량·끼니·영양 추정을 한번에 반환하는 프롬프트."""
-    return f"""당신은 한국 식품 영양 전문가입니다. 사용자의 식사 텍스트를 분석해 음식별 정보를 추출하세요.
+    """AI가 음식명·분량·끼니·총칼로리를 한번에 반환하는 프롬프트."""
+    return f"""당신은 한국 식품 영양 전문가입니다. 사용자의 식사 기록에서 음식을 추출하고
+실제 섭취한 양에 대한 총 칼로리를 추정하세요.
 
 규칙:
-- name: 원래 음식 이름 그대로 (변경 금지).
-- grams: 분량을 그램으로 변환 (아래 힌트 참고). 곱배기·2인분 등 수식어를 반드시 반영.
+- name: 원래 음식 이름 그대로.
+- grams: 실제 섭취량 (그램). 곱배기·2인분·대자 등 수식어를 grams에 반드시 반영.
 - meal: breakfast / lunch / dinner / snack 중 하나.
-- kcal_per_100g: 해당 음식 100g당 칼로리 (한국 식품영양소 기준 추정값).
-- carb_per_100g / protein_per_100g / fat_per_100g: 100g당 탄·단·지 (g).
+- kcal: grams에 해당하는 총 칼로리 (한국 식품영양소 기준).
+- carb_g / protein_g / fat_g: grams에 해당하는 총 탄·단·지 (g).
+- 칼로리 추정 시 조리 방법(튀김·구이·찜 등)과 재료를 고려하세요.
 - 순수 JSON만 반환하세요. 마크다운 없이.
 
 {PORTION_HINTS}
@@ -60,8 +62,11 @@ def _build_meal_parse_prompt(user_text: str) -> str:
 사용자 식사 기록:
 {user_text}
 
-반환 형식:
-{{"items": [{{"name": "짬뽕", "grams": 1360, "meal": "breakfast", "kcal_per_100g": 69, "carb_per_100g": 8.5, "protein_per_100g": 5.0, "fat_per_100g": 1.8}}]}}"""
+반환 형식 예시:
+{{"items": [
+  {{"name": "짬뽕", "grams": 1360, "meal": "breakfast", "kcal": 938, "carb_g": 115, "protein_g": 68, "fat_g": 24}},
+  {{"name": "물회", "grams": 1400, "meal": "dinner", "kcal": 812, "carb_g": 98, "protein_g": 91, "fat_g": 11}}
+]}}"""
 
 
 def _keyword_meal_match(user_text: str, all_foods: list[dict]) -> list[dict]:
@@ -182,6 +187,11 @@ def parse_meals(
                 if not name or grams <= 0:
                     continue
 
+                ai_kcal = float(item.get("kcal") or 0)
+                ai_carb = float(item.get("carb_g") or 0)
+                ai_prot = float(item.get("protein_g") or 0)
+                ai_fat  = float(item.get("fat_g") or 0)
+
                 db_food = food_by_name.get(name)
                 if db_food:
                     # DB에 있으면 DB 영양값 사용 (정확)
@@ -190,22 +200,22 @@ def parse_meals(
                     nutr["confidence"] = 0.95
                     nutr["source"]     = "db"
                 else:
-                    # DB에 없으면 AI 추정값 사용
-                    kcal_p100 = float(item.get("kcal_per_100g") or 0)
-                    carb_p100 = float(item.get("carb_per_100g") or 0)
-                    prot_p100 = float(item.get("protein_per_100g") or 0)
-                    fat_p100  = float(item.get("fat_per_100g") or 0)
-                    if kcal_p100 <= 0:
+                    # DB에 없으면 AI가 추정한 총 칼로리 사용
+                    if ai_kcal <= 0:
                         continue
+                    # 100g당 값 역산 (그램 수정 시 재계산용)
+                    kcal_p100 = ai_kcal / grams * 100 if grams > 0 else 0
+                    carb_p100 = ai_carb / grams * 100 if grams > 0 else 0
+                    prot_p100 = ai_prot / grams * 100 if grams > 0 else 0
+                    fat_p100  = ai_fat  / grams * 100 if grams > 0 else 0
                     nutr = {
                         "food_id":   None,
                         "name":      name,
                         "grams":     grams,
-                        "kcal":      round(kcal_p100 * grams / 100, 1),
-                        "carb_g":    round(carb_p100 * grams / 100, 1),
-                        "protein_g": round(prot_p100 * grams / 100, 1),
-                        "fat_g":     round(fat_p100  * grams / 100, 1),
-                        # AI 추정 재계산용 저장
+                        "kcal":      round(ai_kcal, 1),
+                        "carb_g":    round(ai_carb, 1),
+                        "protein_g": round(ai_prot, 1),
+                        "fat_g":     round(ai_fat,  1),
                         "_kcal_per_100g":    kcal_p100,
                         "_carb_per_100g":    carb_p100,
                         "_protein_per_100g": prot_p100,
