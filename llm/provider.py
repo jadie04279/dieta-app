@@ -63,7 +63,7 @@ class LLMProvider(ABC):
 # ── Groq ─────────────────────────────────────────────────────────────────────
 
 class GroqProvider(LLMProvider):
-    MODEL = "llama-3.3-70b-versatile"
+    MODEL = "llama-3.1-8b-instant"
 
     def __init__(self, api_key: str):
         from groq import Groq
