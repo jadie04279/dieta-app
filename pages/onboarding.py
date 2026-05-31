@@ -9,6 +9,32 @@ import json
 from datetime import date, timedelta
 from db.repo import upsert_profile, add_health_check, upsert_daily_log, save_goal_schedule
 
+
+def _save_and_go(d: dict, goal_line: dict, mode: str):
+    upsert_profile({
+        "sex": d["sex"], "birth_date": d["birth_date"],
+        "height_cm": d["height_cm"], "activity_factor": d["activity_factor"],
+        "goal_weight_kg": d["goal_weight"], "target_date": d["target_date"],
+        "macro_carb_pct": 50, "macro_prot_pct": 30, "macro_fat_pct": 20,
+        "food_prefs_json": json.dumps(
+            {"allergies": [], "dislikes": [], "cuisine": "korean"}, ensure_ascii=False),
+    })
+    upsert_daily_log({"date": str(date.today()), "weight_kg": d["current_weight"]})
+
+    hd = d.get("health_data", {})
+    if any((hd.get(k) or 0) > 0 for k in ["fasting_glucose", "sbp", "ldl", "triglyceride"]):
+        hd["date"] = str(date.today())
+        add_health_check(hd)
+
+    save_goal_schedule(goal_line)
+
+    st.session_state.onboard_step = 1
+    st.session_state.onboard_data = {}
+    st.success("시작합니다!")
+    st.balloons()
+    st.rerun()
+
+
 st.markdown("## 프로필 설정")
 st.markdown("처음 한 번만 입력하시면 됩니다.")
 
@@ -188,27 +214,3 @@ elif st.session_state.onboard_step == 2:
         st.rerun()
 
 
-def _save_and_go(d: dict, goal_line: dict, mode: str):
-    from db.repo import upsert_profile, add_health_check, upsert_daily_log, save_goal_schedule
-    upsert_profile({
-        "sex": d["sex"], "birth_date": d["birth_date"],
-        "height_cm": d["height_cm"], "activity_factor": d["activity_factor"],
-        "goal_weight_kg": d["goal_weight"], "target_date": d["target_date"],
-        "macro_carb_pct": 50, "macro_prot_pct": 30, "macro_fat_pct": 20,
-        "food_prefs_json": json.dumps(
-            {"allergies": [], "dislikes": [], "cuisine": "korean"}, ensure_ascii=False),
-    })
-    upsert_daily_log({"date": str(date.today()), "weight_kg": d["current_weight"]})
-
-    hd = d.get("health_data", {})
-    if any((hd.get(k) or 0) > 0 for k in ["fasting_glucose", "sbp", "ldl", "triglyceride"]):
-        hd["date"] = str(date.today())
-        add_health_check(hd)
-
-    save_goal_schedule(goal_line)
-
-    st.session_state.onboard_step = 1
-    st.session_state.onboard_data = {}
-    st.success("시작합니다!")
-    st.balloons()
-    st.rerun()
