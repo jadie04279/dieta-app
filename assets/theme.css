@@ -1,0 +1,258 @@
+/* Diet Loop — Design token layer
+   Import via st.markdown('<style>@import url(assets/theme.css)</style>', unsafe_allow_html=True)
+   or inject via _inject_css() in app.py
+*/
+
+:root {
+  /* === Dark mode === */
+  --bg-base:       #10151B;
+  --bg-card:       #18202A;
+  --bg-hero:       #161D26;
+  --bg-elevated:   #1E2835;
+
+  --text-primary:   #EAF0F6;
+  --text-secondary: #9AA7B4;
+  --text-tertiary:  #5E6B78;
+
+  --border:        rgba(255, 255, 255, 0.07);
+
+  --accent:        #84C5F4;          /* ice blue — links, active, rings */
+  --accent-dim:    rgba(132, 197, 244, 0.15);
+  --accent-text:   #A9D6F7;
+
+  --positive:      #6FD4C9;          /* mint — progress positive */
+  --positive-dim:  rgba(111, 212, 201, 0.15);
+
+  --warning:       #F4B84A;          /* amber — needs review */
+  --warning-dim:   rgba(244, 184, 74, 0.15);
+
+  --danger:        #F47084;          /* soft red — over limit */
+  --danger-dim:    rgba(244, 112, 132, 0.15);
+
+  /* Spacing */
+  --gap-card:      16px;
+  --pad-card:      20px;
+  --radius-card:   18px;
+  --radius-chip:   8px;
+
+  /* Typography */
+  --font-hero:     48px;
+  --font-h2:       28px;
+  --font-h3:       20px;
+  --font-body:     15px;
+  --font-label:    13px;
+}
+
+/* === Light mode override === */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-base:       #F5F7FA;
+    --bg-card:       #FFFFFF;
+    --bg-hero:       #EEF2F7;
+    --bg-elevated:   #E8EDF4;
+
+    --text-primary:   #1A2330;
+    --text-secondary: #4A5568;
+    --text-tertiary:  #8A95A3;
+
+    --border:        rgba(0, 0, 0, 0.08);
+    --accent:        #2D8FDB;
+    --accent-dim:    rgba(45, 143, 219, 0.12);
+    --accent-text:   #1A72B8;
+
+    --positive:      #1A9E94;
+    --positive-dim:  rgba(26, 158, 148, 0.12);
+  }
+}
+
+/* === Base resets === */
+body {
+  background-color: var(--bg-base) !important;
+  color: var(--text-primary) !important;
+  font-size: var(--font-body);
+}
+
+/* === Streamlit overrides === */
+.stApp {
+  background-color: var(--bg-base) !important;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] {
+  background-color: var(--bg-card) !important;
+  border-right: 1px solid var(--border) !important;
+}
+
+/* Cards via st.container with border=True */
+div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
+  border-radius: var(--radius-card);
+}
+
+/* Metric value */
+div[data-testid="stMetric"] label {
+  color: var(--text-secondary) !important;
+  font-size: var(--font-label) !important;
+}
+div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+  color: var(--text-primary) !important;
+}
+
+/* Tabs */
+.stTabs [data-baseweb="tab-list"] {
+  background-color: var(--bg-card) !important;
+  border-radius: var(--radius-card) !important;
+  padding: 4px;
+  gap: 2px;
+}
+.stTabs [data-baseweb="tab"] {
+  border-radius: 12px !important;
+  color: var(--text-secondary) !important;
+  padding: 8px 16px !important;
+}
+.stTabs [aria-selected="true"] {
+  background-color: var(--accent-dim) !important;
+  color: var(--accent-text) !important;
+}
+
+/* Buttons */
+.stButton > button {
+  background-color: var(--accent-dim) !important;
+  color: var(--accent-text) !important;
+  border: 1px solid rgba(132, 197, 244, 0.3) !important;
+  border-radius: 12px !important;
+  padding: 10px 20px !important;
+  font-weight: 500 !important;
+  min-height: 44px !important;
+}
+.stButton > button:hover {
+  background-color: var(--accent) !important;
+  color: var(--bg-base) !important;
+}
+
+/* Inputs */
+.stTextInput > div > input,
+.stNumberInput > div > input,
+.stSelectbox > div > div,
+.stDateInput > div > input {
+  background-color: var(--bg-elevated) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  color: var(--text-primary) !important;
+}
+
+/* Progress bars */
+.stProgress > div > div > div {
+  background-color: var(--accent) !important;
+  border-radius: 4px !important;
+}
+
+/* Alerts */
+.stAlert {
+  border-radius: var(--radius-card) !important;
+}
+
+/* Chip utility class */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-chip);
+  font-size: var(--font-label);
+  background-color: var(--accent-dim);
+  color: var(--accent-text);
+}
+.chip-warning {
+  background-color: var(--warning-dim);
+  color: var(--warning);
+}
+.chip-positive {
+  background-color: var(--positive-dim);
+  color: var(--positive);
+}
+.chip-danger {
+  background-color: var(--danger-dim);
+  color: var(--danger);
+}
+
+/* Hero number */
+.hero-number {
+  font-size: var(--font-hero);
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.hero-label {
+  font-size: var(--font-label);
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* Card wrapper */
+.diet-card {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-card);
+  padding: var(--pad-card);
+  margin-bottom: var(--gap-card);
+  border: 1px solid var(--border);
+}
+
+/* Disclaimer */
+.disclaimer {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  line-height: 1.6;
+}
+
+/* Flag cards */
+.flag-card {
+  border-radius: var(--radius-chip);
+  padding: 10px 14px;
+  margin: 6px 0;
+  font-size: var(--font-label);
+  line-height: 1.5;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.flag-error {
+  background-color: var(--danger-dim);
+  border-left: 3px solid var(--danger);
+  color: var(--danger);
+}
+.flag-warning {
+  background-color: var(--warning-dim);
+  border-left: 3px solid var(--warning);
+  color: var(--warning);
+}
+.flag-info {
+  background-color: var(--accent-dim);
+  border-left: 3px solid var(--accent);
+  color: var(--accent-text);
+}
+
+/* Report section cards */
+.report-card {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-card);
+  padding: var(--pad-card);
+  margin-bottom: var(--gap-card);
+  border: 1px solid var(--border);
+}
+
+/* Meal plan row */
+.meal-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-label);
+}
+.meal-row:last-child {
+  border-bottom: none;
+}

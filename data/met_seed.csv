@@ -1,0 +1,35 @@
+activity_key,name,category,met
+walk_slow,걷기 (느린 속도 3km/h),유산소,2.5
+walk_moderate,걷기 (보통 속도 4km/h),유산소,3.5
+walk_brisk,빠르게 걷기 (6km/h),유산소,4.3
+walk_very_brisk,매우 빠르게 걷기 (7km/h),유산소,5.0
+run_jog,조깅 (8km/h),유산소,8.0
+run_moderate,달리기 (10km/h),유산소,10.0
+run_fast,달리기 (12km/h),유산소,11.5
+run_very_fast,달리기 (14km/h+),유산소,13.5
+cycling_leisure,자전거 (레저 16km/h),유산소,4.0
+cycling_moderate,자전거 (보통 20km/h),유산소,6.8
+cycling_vigorous,자전거 (고강도 25km/h),유산소,10.0
+swimming_leisure,수영 (레저),유산소,5.8
+swimming_moderate,수영 (보통 강도),유산소,7.0
+swimming_vigorous,수영 (고강도),유산소,9.8
+resistance_light,근력운동 (가벼운 강도),근력,3.0
+resistance_moderate,근력운동 (보통 강도),근력,5.0
+resistance_vigorous,근력운동 (고강도),근력,6.0
+hiit,HIIT / 고강도 인터벌,복합,8.0
+yoga,요가,유연성,2.5
+pilates,필라테스,유연성,3.0
+stretching,스트레칭,유연성,2.3
+hiking,등산 / 하이킹,유산소,5.3
+stair_climbing,계단 오르기,유산소,8.0
+jump_rope,줄넘기,유산소,10.0
+basketball,농구,구기,6.5
+soccer,축구,구기,7.0
+badminton,배드민턴,구기,5.5
+tennis,테니스,구기,7.3
+volleyball,배구,구기,4.0
+dance_moderate,댄스 (보통 강도),기타,4.5
+dance_vigorous,댄스 (고강도),기타,7.8
+housework_light,집안일 (가벼운),기타,2.5
+housework_vigorous,집안일 (청소 등 활동적),기타,3.5
+standing,서 있기,기타,1.5
