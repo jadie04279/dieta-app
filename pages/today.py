@@ -207,20 +207,38 @@ with tab_m:
 
         for i, item in enumerate(st.session_state.parsed_meals):
             conf   = item.get("confidence", 1.0)
-            source = item.get("source", "llm")
-            badge  = "🔴 확인 필요" if conf < 0.6 else ("🟡" if conf < 0.85 else "🟢")
+            source = item.get("source", "db")
+            if source == "ai_estimate":
+                badge = "🔵 AI추정"
+            elif source in ("db", "exact"):
+                badge = "🟢 DB"
+            elif conf < 0.6:
+                badge = "🔴 확인필요"
+            else:
+                badge = "🟡"
 
             ci1, ci2, ci3, ci4 = st.columns([3, 1.5, 1.5, 0.7])
             with ci1:
                 st.markdown(f"**{item['name']}** {badge}")
-                st.caption(item.get("meal", "") + (" · 규칙 기반" if source == "fallback" else ""))
+                src_label = {"db": "DB", "ai_estimate": "AI 추정", "fallback": "규칙 기반", "exact": "정확 매칭"}.get(source, source)
+                st.caption(f"{item.get('meal', '')} · {src_label}")
             with ci2:
                 new_g = st.number_input("g", min_value=5.0, max_value=2000.0,
                                         value=float(item["grams"]), step=5.0,
                                         key=f"meal_g_{i}", label_visibility="collapsed")
             with ci3:
-                food = all_foods_db.get(item["food_id"])
-                recalc = calc_item_nutrition(food, new_g) if food and new_g != item["grams"] else item
+                food = all_foods_db.get(item.get("food_id"))
+                if food and new_g != item["grams"]:
+                    recalc = calc_item_nutrition(food, new_g)
+                elif not food and new_g != item["grams"] and item.get("_kcal_per_100g"):
+                    # AI 추정 항목: 100g당 값으로 비례 재계산
+                    recalc = {**item, "grams": new_g,
+                               "kcal":      round(item["_kcal_per_100g"]    * new_g / 100, 1),
+                               "carb_g":    round(item["_carb_per_100g"]    * new_g / 100, 1),
+                               "protein_g": round(item["_protein_per_100g"] * new_g / 100, 1),
+                               "fat_g":     round(item["_fat_per_100g"]     * new_g / 100, 1)}
+                else:
+                    recalc = item
                 st.markdown(f"**{recalc['kcal']:.0f} kcal**")
             with ci4:
                 keep = st.checkbox("", value=True, key=f"meal_keep_{i}")
@@ -341,10 +359,11 @@ with tab_e:
         current_w = float(actual_weight or 65.0)
 
         for i, item in enumerate(st.session_state.parsed_exercises):
-            badge = "🟡" if item.get("source") == "fallback" else "🟢"
+            ex_source = item.get("source", "db")
+            ex_badge  = "🔵 AI추정" if ex_source == "ai_estimate" else ("🟡" if ex_source == "fallback" else "🟢")
             ei1, ei2, ei3, ei4 = st.columns([3, 1.5, 1.5, 0.7])
             with ei1:
-                st.markdown(f"**{item['name']}** {badge}")
+                st.markdown(f"**{item['name']}** {ex_badge}")
                 st.caption(f"MET {item['met']:.1f}")
             with ei2:
                 new_min = st.number_input("분", min_value=5, max_value=300,

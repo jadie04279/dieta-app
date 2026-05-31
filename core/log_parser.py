@@ -43,34 +43,25 @@ MEAL_KEYWORDS = {
 
 # ── Meal parsing ─────────────────────────────────────────────────────────────
 
-def _build_meal_parse_prompt(user_text: str, candidate_foods: list[dict]) -> str:
-    foods_txt = "\n".join(
-        f"ID={f['id']}|{f['name']}|{f['category']}|{f['kcal_per_100g']:.0f}kcal/100g|{f.get('serving_desc','')}"
-        for f in candidate_foods[:60]
-    )
-    return f"""당신은 한국어 식사 기록 파서입니다. 사용자의 식사 텍스트를 분석해 음식 DB 항목으로 매핑하세요.
+def _build_meal_parse_prompt(user_text: str) -> str:
+    """AI가 음식명·분량·끼니·영양 추정을 한번에 반환하는 프롬프트."""
+    return f"""당신은 한국 식품 영양 전문가입니다. 사용자의 식사 텍스트를 분석해 음식별 정보를 추출하세요.
 
 규칙:
-- 아래 foods 목록의 ID만 사용하세요. 목록에 없는 ID 생성 금지.
-- 칼로리 숫자를 절대 생성하지 마세요 (코드가 계산합니다).
-- 끼니(meal)는 breakfast / lunch / dinner / snack 중 하나.
-- grams를 그램으로 추정하세요 (아래 분량 힌트 참고).
-- 곱배기·2인분·대자 등 분량 수식어를 반드시 grams에 반영하세요.
-- 음식명이 DB에 있는 항목과 정확히 일치하면 confidence 0.9 이상.
-- DB에 없는 음식 → 가장 유사한 카테고리 항목으로 매핑하고 confidence 0.5 이하.
-- 음식 이름이 DB 항목명과 유사하면 적극적으로 매핑하세요 (예: 짬뽕→짬뽕, 물회→물회).
+- name: 원래 음식 이름 그대로 (변경 금지).
+- grams: 분량을 그램으로 변환 (아래 힌트 참고). 곱배기·2인분 등 수식어를 반드시 반영.
+- meal: breakfast / lunch / dinner / snack 중 하나.
+- kcal_per_100g: 해당 음식 100g당 칼로리 (한국 식품영양소 기준 추정값).
+- carb_per_100g / protein_per_100g / fat_per_100g: 100g당 탄·단·지 (g).
 - 순수 JSON만 반환하세요. 마크다운 없이.
 
 {PORTION_HINTS}
-
-음식 DB (ID|이름|카테고리|100g당kcal|1회제공량):
-{foods_txt}
 
 사용자 식사 기록:
 {user_text}
 
 반환 형식:
-{{"items": [{{"food_id": 123, "name": "음식명", "grams": 210, "meal": "breakfast", "confidence": 0.9}}]}}"""
+{{"items": [{{"name": "짬뽕", "grams": 1360, "meal": "breakfast", "kcal_per_100g": 69, "carb_per_100g": 8.5, "protein_per_100g": 5.0, "fat_per_100g": 1.8}}]}}"""
 
 
 def _keyword_meal_match(user_text: str, all_foods: list[dict]) -> list[dict]:
@@ -157,100 +148,77 @@ def parse_meals(
     current_weight: float = 65.0,
 ) -> list[dict]:
     """
-    Parse Korean meal text → list of food items with kcal computed from DB.
+    Parse Korean meal text → list of food items with kcal.
 
-    Each item: {food_id, name, grams, meal, kcal, carb_g, protein_g, fat_g, confidence, source}
+    우선순위:
+    1. AI 분석: 음식명·분량·영양을 AI가 직접 추정
+       → DB에 같은 이름이 있으면 DB 값으로 덮어씀 (정확도 보장)
+       → DB에 없으면 AI 추정값 사용 (source='ai_estimate')
+    2. 규칙 기반 fallback: AI 실패 시 키워드 매칭
     """
     from llm.provider import get_provider
     from core.planner import calc_item_nutrition
 
-    food_db = {f["id"]: f for f in all_foods}
-    text_tokens = set(re.split(r"[,，、\s]+", user_text))
-
-    # ── Step 1: 음식명 정확 매칭 (LLM 오매핑 방지) ──────────────────────────
-    # 사용자 텍스트에 DB 음식명이 정확히 포함되면 바로 매핑
-    def _portion_mult(ctx: str) -> float:
-        if any(w in ctx for w in ["곱배기", "곱빼기"]):
-            return 1.7
-        if "2인분" in ctx:
-            return 2.0
-        if "3인분" in ctx:
-            return 3.0
-        if any(w in ctx for w in ["대자", "큰것", "큰 것"]):
-            return 1.5
-        if any(w in ctx for w in ["소자", "반", "작은"]):
-            return 0.5
-        return 1.0
-
-    def _detect_meal_ctx(token: str) -> str:
-        idx = user_text.find(token)
-        ctx = user_text[max(0, idx - 20):idx + 20]
-        for m, kws in MEAL_KEYWORDS.items():
-            if any(k in ctx for k in kws):
-                return m
-        return "breakfast"
-
-    exact_items: list[dict] = []
-    exact_ids: set[int] = set()
-    for food in all_foods:
-        clean = re.sub(r"[\(（].*?[\)）]", "", food["name"]).strip()
-        if len(clean) < 2 or food["id"] in exact_ids:
-            continue
-        if clean in text_tokens:
-            base = _default_grams(food)
-            # 해당 음식 전후 문맥에서 분량 배수 추출
-            idx = user_text.find(clean)
-            ctx = user_text[max(0, idx - 10):idx + len(clean) + 10]
-            grams = round(base * _portion_mult(ctx), 0)
-            nutr = calc_item_nutrition(food, grams)
-            nutr["meal"]       = _detect_meal_ctx(clean)
-            nutr["confidence"] = 0.95
-            nutr["source"]     = "exact"
-            exact_items.append(nutr)
-            exact_ids.add(food["id"])
-
-    if exact_items:
-        return exact_items
-
-    # ── Step 2: LLM 분석 (정확 매칭 실패 시) ────────────────────────────────
-    tokens = re.split(r"[,，、\s]+", user_text)
-    candidates = []
-    cand_ids: set[int] = set()
-    for tok in tokens:
-        tok = tok.strip()
-        if len(tok) < 2:
-            continue
-        for food in all_foods:
-            if food["id"] not in cand_ids and tok in food["name"]:
-                candidates.append(food)
-                cand_ids.add(food["id"])
-    for food in all_foods:
-        if food["id"] not in cand_ids and food["category"] in (
-            "한식 메뉴", "국/찌개", "곡류", "달걀/유제품", "채소"
-        ):
-            candidates.append(food)
-            cand_ids.add(food["id"])
-        if len(candidates) >= 80:
-            break
+    # DB 음식명 → food 매핑 (괄호 제거 버전도 포함)
+    food_by_name: dict[str, dict] = {}
+    for f in all_foods:
+        food_by_name[f["name"]] = f
+        clean = re.sub(r"[\(（].*?[\)）]", "", f["name"]).strip()
+        if clean:
+            food_by_name[clean] = f
 
     provider = get_provider()
     raw_items: list[dict] = []
 
-    if provider.available and candidates:
-        prompt = _build_meal_parse_prompt(user_text, candidates)
+    # ── Step 1: AI 분석 ───────────────────────────────────────────────────────
+    if provider.available:
+        prompt = _build_meal_parse_prompt(user_text)
         raw = provider.generate_json(prompt, retries=2)
         if raw and "items" in raw:
             for item in raw["items"]:
-                fid   = item.get("food_id")
-                grams = float(item.get("grams", 0) or 0)
-                if fid and fid in food_db and grams > 0:
-                    nutr = calc_item_nutrition(food_db[fid], grams)
-                    nutr["meal"]       = item.get("meal", "breakfast")
-                    nutr["confidence"] = float(item.get("confidence", 0.8))
-                    nutr["source"]     = "llm"
-                    raw_items.append(nutr)
+                name  = (item.get("name") or "").strip()
+                grams = float(item.get("grams") or 0)
+                meal  = item.get("meal", "breakfast")
+                if not name or grams <= 0:
+                    continue
 
+                db_food = food_by_name.get(name)
+                if db_food:
+                    # DB에 있으면 DB 영양값 사용 (정확)
+                    nutr = calc_item_nutrition(db_food, grams)
+                    nutr["meal"]       = meal
+                    nutr["confidence"] = 0.95
+                    nutr["source"]     = "db"
+                else:
+                    # DB에 없으면 AI 추정값 사용
+                    kcal_p100 = float(item.get("kcal_per_100g") or 0)
+                    carb_p100 = float(item.get("carb_per_100g") or 0)
+                    prot_p100 = float(item.get("protein_per_100g") or 0)
+                    fat_p100  = float(item.get("fat_per_100g") or 0)
+                    if kcal_p100 <= 0:
+                        continue
+                    nutr = {
+                        "food_id":   None,
+                        "name":      name,
+                        "grams":     grams,
+                        "kcal":      round(kcal_p100 * grams / 100, 1),
+                        "carb_g":    round(carb_p100 * grams / 100, 1),
+                        "protein_g": round(prot_p100 * grams / 100, 1),
+                        "fat_g":     round(fat_p100  * grams / 100, 1),
+                        # AI 추정 재계산용 저장
+                        "_kcal_per_100g":    kcal_p100,
+                        "_carb_per_100g":    carb_p100,
+                        "_protein_per_100g": prot_p100,
+                        "_fat_per_100g":     fat_p100,
+                        "meal":       meal,
+                        "confidence": 0.75,
+                        "source":     "ai_estimate",
+                    }
+                raw_items.append(nutr)
+
+    # ── Step 2: 규칙 기반 fallback ────────────────────────────────────────────
     if not raw_items:
+        food_db = {f["id"]: f for f in all_foods}
         for item in _keyword_meal_match(user_text, all_foods):
             fid   = item["food_id"]
             grams = item["grams"]
@@ -277,23 +245,24 @@ def _build_exercise_parse_prompt(user_text: str, met_values: list[dict]) -> str:
         f"{m['activity_key']}|{m['name']}|{m['category']}|MET={m['met']}"
         for m in met_values
     )
-    return f"""당신은 한국어 운동 기록 파서입니다. 사용자의 운동 텍스트를 분석해 운동 DB 활동으로 매핑하세요.
+    return f"""당신은 한국어 운동 기록 파서 겸 운동생리학 전문가입니다.
+사용자의 운동 텍스트를 분석해 운동별 정보를 추출하세요.
 
 규칙:
-- 아래 activities 목록의 activity_key만 사용하세요.
-- 칼로리 숫자를 절대 생성하지 마세요 (코드가 계산합니다).
-- 시간은 분(minutes) 단위로 변환하세요 ("1시간" = 60, "30분" = 30).
-- 강도가 모호하면 보수적(낮은 MET) 기본값 사용.
+- name: 운동 이름 그대로.
+- minutes: 운동 시간을 분으로 변환 ("1시간" = 60, "30분" = 30, 미기재 시 30).
+- met: MET 값 (아래 DB 참고; DB에 없으면 직접 추정).
+- 강도가 모호하면 보수적(낮은 MET) 값 사용.
 - 순수 JSON만 반환하세요. 마크다운 없이.
 
-운동 DB (activity_key|이름|카테고리|MET):
+참고 MET DB (activity_key|이름|MET):
 {acts_txt}
 
 사용자 운동 기록:
 {user_text}
 
 반환 형식:
-{{"items": [{{"activity_key": "walk_brisk", "minutes": 40}}]}}"""
+{{"items": [{{"name": "빠르게 걷기", "minutes": 40, "met": 4.3}}]}}"""
 
 
 # Simple keyword → activity_key mapping for fallback
@@ -353,13 +322,20 @@ def parse_exercises(
     current_weight: float = 65.0,
 ) -> list[dict]:
     """
-    Parse Korean exercise text → list of activity items with kcal computed from MET table.
+    Parse Korean exercise text → list of activity items with kcal.
 
-    Each item: {activity_key, name, minutes, met, kcal, source}
-    kcal = MET × weight_kg × (minutes / 60)
+    우선순위:
+    1. AI 분석: 운동명·시간·MET를 AI가 직접 추정
+       → DB에 같은 이름이 있으면 DB MET 사용 (정확)
+       → DB에 없으면 AI 추정 MET 사용 (source='ai_estimate')
+    2. 규칙 기반 fallback: AI 실패 시 키워드 매칭
     """
     from llm.provider import get_provider
-    met_db = {m["activity_key"]: m for m in met_values}
+
+    # MET DB: 이름 → met_record 매핑
+    met_by_name: dict[str, dict] = {}
+    for m in met_values:
+        met_by_name[m["name"]] = m
 
     provider = get_provider()
     raw_items: list[dict] = []
@@ -369,21 +345,27 @@ def parse_exercises(
         raw = provider.generate_json(prompt, retries=2)
         if raw and "items" in raw:
             for item in raw["items"]:
-                key  = item.get("activity_key")
-                mins = float(item.get("minutes", 0) or 0)
-                if key and key in met_db and mins > 0:
-                    met_val = met_db[key]["met"]
-                    kcal = round(met_val * current_weight * (mins / 60.0), 1)
-                    raw_items.append({
-                        "activity_key": key,
-                        "name":         met_db[key]["name"],
-                        "minutes":      round(mins),
-                        "met":          met_val,
-                        "kcal":         kcal,
-                        "source":       "llm",
-                    })
+                name = (item.get("name") or "").strip()
+                mins = float(item.get("minutes") or 0)
+                ai_met = float(item.get("met") or 0)
+                if not name or mins <= 0 or ai_met <= 0:
+                    continue
+
+                db_rec = met_by_name.get(name)
+                met_val = db_rec["met"] if db_rec else ai_met
+                source  = "db" if db_rec else "ai_estimate"
+                kcal = round(met_val * current_weight * (mins / 60.0), 1)
+                raw_items.append({
+                    "activity_key": db_rec["activity_key"] if db_rec else None,
+                    "name":         name,
+                    "minutes":      round(mins),
+                    "met":          met_val,
+                    "kcal":         kcal,
+                    "source":       source,
+                })
 
     if not raw_items:
+        met_db = {m["activity_key"]: m for m in met_values}
         for item in _keyword_exercise_match(user_text, met_values):
             key  = item["activity_key"]
             mins = item["minutes"]
