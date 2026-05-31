@@ -62,7 +62,7 @@ if pct_done is not None:
 
 if goal_line and latest_trend:
     gt = goal_daily_target(goal_line, date.today())
-    tw = gt.get("target_weight")
+    tw = gt.get("target_weight") if gt else None
     if tw:
         diff = latest_trend - tw
         if abs(diff) < 0.3:

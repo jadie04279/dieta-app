@@ -177,7 +177,12 @@ def get_profile() -> Optional[dict]:
     conn = get_connection()
     row = conn.execute("SELECT * FROM profile WHERE id=1").fetchone()
     conn.close()
-    return row  # already a dict or None
+    if row and row.get("food_prefs_json"):
+        try:
+            row["food_prefs_json"] = json.loads(row["food_prefs_json"])
+        except (json.JSONDecodeError, TypeError):
+            row["food_prefs_json"] = {}
+    return row
 
 
 def upsert_profile(data: dict) -> None:
@@ -357,7 +362,7 @@ def get_weekly_plan(week_start: str) -> Optional[dict]:
             try:
                 row[field] = json.loads(row[field])
             except (json.JSONDecodeError, TypeError):
-                row[field] = {}
+                row[field] = [] if field == "flags_json" else {}
     return row
 
 
@@ -372,7 +377,7 @@ def get_latest_weekly_plan() -> Optional[dict]:
             try:
                 row[field] = json.loads(row[field])
             except (json.JSONDecodeError, TypeError):
-                row[field] = {}
+                row[field] = [] if field == "flags_json" else {}
     return row
 
 

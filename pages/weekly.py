@@ -87,7 +87,9 @@ with tab_goal:
         today_str = str(date.today())
         rows = []
         for i, entry in enumerate(weekly[:16]):
-            ws = entry["week_start"]
+            ws = entry.get("week_start", "")
+            if not ws:
+                continue
             we = str(date.fromisoformat(ws) + timedelta(weeks=1))
             is_current = ws <= today_str < we
             rows.append({

@@ -29,7 +29,8 @@ with st.form("settings_form"):
             value=float(profile["height_cm"]), step=0.5,
         )
     with col2:
-        birth_date = st.date_input("생년월일", value=date.fromisoformat(profile["birth_date"]))
+        birth_date = st.date_input("생년월일",
+            value=date.fromisoformat(profile["birth_date"]) if profile.get("birth_date") else date(1990, 1, 1))
         activity_labels = {
             1.2:   "거의 안 움직임",
             1.375: "가볍게 활동 (주 1~3회)",

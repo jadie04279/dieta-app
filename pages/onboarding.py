@@ -16,8 +16,7 @@ def _save_and_go(d: dict, goal_line: dict, mode: str):
         "height_cm": d["height_cm"], "activity_factor": d["activity_factor"],
         "goal_weight_kg": d["goal_weight"], "target_date": d["target_date"],
         "macro_carb_pct": 50, "macro_prot_pct": 30, "macro_fat_pct": 20,
-        "food_prefs_json": json.dumps(
-            {"allergies": [], "dislikes": [], "cuisine": "korean"}, ensure_ascii=False),
+        "food_prefs_json": {"allergies": [], "dislikes": [], "cuisine": "korean"},
     })
     upsert_daily_log({"date": str(date.today()), "weight_kg": d["current_weight"]})
 
