@@ -6,6 +6,7 @@ All public functions return plain dicts/lists; no ORM; no leaked connections.
 import sqlite3
 import json
 import os
+import datetime as _dt
 from pathlib import Path
 from typing import Optional
 
@@ -14,19 +15,27 @@ _SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 _SCHEMA_PG   = Path(__file__).parent / "schema_pg.sql"
 
 
+def _normalize_row(row: dict) -> dict:
+    """PostgreSQL returns date/datetime as native objects; convert to ISO strings for consistency."""
+    return {
+        k: v.isoformat() if isinstance(v, (_dt.date, _dt.datetime)) else v
+        for k, v in row.items()
+    }
+
+
 # ── Connection wrapper ────────────────────────────────────────────────────────
 
 class _Cur:
-    """Cursor wrapper: fetchone/fetchall always return plain dicts."""
+    """Cursor wrapper: fetchone/fetchall always return plain dicts with dates as ISO strings."""
     def __init__(self, raw):
         self._raw = raw
 
     def fetchone(self) -> Optional[dict]:
         row = self._raw.fetchone()
-        return dict(row) if row is not None else None
+        return _normalize_row(dict(row)) if row is not None else None
 
     def fetchall(self) -> list[dict]:
-        return [dict(r) for r in self._raw.fetchall()]
+        return [_normalize_row(dict(r)) for r in self._raw.fetchall()]
 
     @property
     def lastrowid(self):
