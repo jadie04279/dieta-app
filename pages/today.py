@@ -329,10 +329,59 @@ with tab_m:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab_e:
     # 진행률
+    progress_text = (
+        "오늘은 휴식일입니다 😴"
+        if is_rest_day and target_exercise == 0
+        else f"오늘 운동 {actual_exercise:.0f} / {target_exercise:.0f} kcal  ({exercise_pct:.0f}%)"
+    )
     st.progress(
         min(1.0, actual_exercise / target_exercise) if target_exercise > 0 else 0.0,
-        text=f"오늘 운동 {actual_exercise:.0f} / {target_exercise:.0f} kcal  ({exercise_pct:.0f}%)",
+        text=progress_text,
     )
+
+    # ── 오늘의 운동 계획 체크리스트 ─────────────────────────────────────────
+    if _today_session and _today_session.get("activities"):
+        st.markdown("#### 📋 오늘의 운동 계획")
+        st.caption("완료한 운동을 체크하고 저장하세요.")
+
+        plan_acts = _today_session["activities"]
+        current_w_plan = float(actual_weight or 65.0)
+        checked_acts: list[dict] = []
+
+        for i, act in enumerate(plan_acts):
+            pc1, pc2, pc3, pc4 = st.columns([0.5, 3, 1.5, 1.5])
+            done = pc1.checkbox("", key=f"plan_done_{i}", value=False)
+            pc2.markdown(f"**{act['name']}**")
+            adj_min = pc3.number_input("분", min_value=5, max_value=300,
+                                        value=int(act.get("minutes", 30)), step=5,
+                                        key=f"plan_min_{i}", label_visibility="collapsed")
+            adj_kcal = round(act["met"] * current_w_plan * (adj_min / 60.0), 1)
+            pc4.markdown(f"**{adj_kcal:.0f} kcal**")
+            if done:
+                checked_acts.append({**act, "minutes": adj_min, "kcal": adj_kcal, "source": "plan"})
+
+        if checked_acts:
+            plan_total_kcal = sum(a["kcal"] for a in checked_acts)
+            plan_pct = min(100, plan_total_kcal / target_exercise * 100) if target_exercise > 0 else 0
+            p_c = "var(--positive)" if plan_pct >= 100 else ("var(--warning)" if plan_pct >= 50 else "var(--danger)")
+            st.markdown(f"""
+<div class="diet-card" style="margin-top:4px;margin-bottom:8px">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <span>체크된 운동 합계: <strong>{plan_total_kcal:.0f} kcal</strong></span>
+    <span style="color:{p_c};font-weight:700;font-size:18px">{plan_pct:.0f}%</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+            if st.button("✅ 체크된 운동 저장", type="primary", use_container_width=True, key="save_plan_ex"):
+                upsert_daily_log({
+                    "date": today_str,
+                    "exercise_kcal":       plan_total_kcal,
+                    "exercise_items_json": checked_acts,
+                })
+                st.success(f"운동 기록 저장됨 — {plan_total_kcal:.0f} kcal")
+                st.rerun()
+
+        st.divider()
 
     st.markdown("#### 오늘 하신 운동을 자유롭게 입력하세요")
     exercise_raw = st.text_area(
