@@ -17,14 +17,21 @@ from typing import Optional
 # Korean portion-size hints (for LLM prompt and fallback)
 PORTION_HINTS = """한국어 분량 표현 참고:
 - 한 공기 / 1공기 = 밥류 210g
-- 한 그릇 = 국물류 300g, 면류 250g
+- 한 그릇 = 국물류 800g, 면류 600g
 - 한 개 / 1개 = 달걀 50g, 바나나 120g, 사과 200g
 - 한 조각 = 빵 30g
 - 한 줌 = 견과류 30g
-- 1인분 = 고기류 150g, 찌개류 200g
+- 1인분 = 한식메뉴 기본 제공량 (음식별 serving_desc 참고)
+- 2인분 = 1인분 × 2
+- 3인분 = 1인분 × 3
+- 곱배기 = 기본 1인분 × 1.7 (면류/국물류)
+- 대자 / 큰 것 = 기본 × 1.5
+- 소자 / 작은 것 = 기본 × 0.7
+- 반 / 절반 = 기본 × 0.5
 - 한 캔 = 참치캔 100g
 - 한 팩 = 요거트 100g
-- 적당히 / 조금 = 50g 기본값"""
+- 적당히 / 조금 = 50g 기본값
+- 한식 메뉴 1인분 기준: 짬뽕 800g, 짜장면 600g, 물회 700g, 비빔밥 600g, 냉면 600g, 김밥 1줄 250g, 떡볶이 300g, 돈까스 200g"""
 
 MEAL_KEYWORDS = {
     "breakfast": ["아침", "조식", "아침밥", "아침식사"],
@@ -48,7 +55,10 @@ def _build_meal_parse_prompt(user_text: str, candidate_foods: list[dict]) -> str
 - 칼로리 숫자를 절대 생성하지 마세요 (코드가 계산합니다).
 - 끼니(meal)는 breakfast / lunch / dinner / snack 중 하나.
 - grams를 그램으로 추정하세요 (아래 분량 힌트 참고).
-- DB에 없는 음식 → 가장 유사한 항목으로 매핑하고 confidence 0.5 이하.
+- 곱배기·2인분·대자 등 분량 수식어를 반드시 grams에 반영하세요.
+- 음식명이 DB에 있는 항목과 정확히 일치하면 confidence 0.9 이상.
+- DB에 없는 음식 → 가장 유사한 카테고리 항목으로 매핑하고 confidence 0.5 이하.
+- 음식 이름이 DB 항목명과 유사하면 적극적으로 매핑하세요 (예: 짬뽕→짬뽕, 물회→물회).
 - 순수 JSON만 반환하세요. 마크다운 없이.
 
 {PORTION_HINTS}
