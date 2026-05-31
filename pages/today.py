@@ -3,7 +3,7 @@ Today page: daily targets + natural-language meal/exercise logging with parse co
 """
 import streamlit as st
 from datetime import date
-from core.utils import today as _today
+from core.utils import today as _today, estimate_steps, steps_label, steps_to_kcal, steps_to_minutes
 
 from db.repo import (
     get_profile, get_daily_log, upsert_daily_log,
@@ -349,16 +349,47 @@ with tab_e:
         checked_acts: list[dict] = []
 
         for i, act in enumerate(plan_acts):
+            steps_possible = estimate_steps(
+                int(act.get("minutes", 30)),
+                act.get("activity_key"), act.get("name")
+            )
+            is_walk = steps_possible is not None
+
             pc1, pc2, pc3, pc4 = st.columns([0.5, 3, 1.5, 1.5])
             done = pc1.checkbox("", key=f"plan_done_{i}", value=False)
-            pc2.markdown(f"**{act['name']}**")
-            adj_min = pc3.number_input("분", min_value=5, max_value=300,
-                                        value=int(act.get("minutes", 30)), step=5,
-                                        key=f"plan_min_{i}", label_visibility="collapsed")
-            adj_kcal = round(act["met"] * current_w_plan * (adj_min / 60.0), 1)
+
+            if is_walk:
+                # 걷기: 걸음수 입력으로 분·칼로리 계산
+                default_steps = estimate_steps(
+                    int(act.get("minutes", 30)),
+                    act.get("activity_key"), act.get("name")
+                ) or 3000
+                with pc2:
+                    st.markdown(f"**{act['name']}**")
+                    adj_steps = st.number_input(
+                        "걸음수", min_value=100, max_value=50000,
+                        value=int(default_steps), step=500,
+                        key=f"plan_steps_{i}", label_visibility="collapsed",
+                        disabled=not done,
+                    )
+                adj_min  = steps_to_minutes(adj_steps)
+                adj_kcal = steps_to_kcal(adj_steps, current_w_plan)
+                pc3.markdown(f"🦶 **{adj_steps:,}**보")
+                if adj_steps >= 10000:
+                    pc3.caption("만보 달성!")
+            else:
+                pc2.markdown(f"**{act['name']}**")
+                adj_min = pc3.number_input("분", min_value=5, max_value=300,
+                                            value=int(act.get("minutes", 30)), step=5,
+                                            key=f"plan_min_{i}", label_visibility="collapsed",
+                                            disabled=not done)
+                adj_kcal = round(act["met"] * current_w_plan * (adj_min / 60.0), 1)
+                adj_steps = None
+
             pc4.markdown(f"**{adj_kcal:.0f} kcal**")
             if done:
-                checked_acts.append({**act, "minutes": adj_min, "kcal": adj_kcal, "source": "plan"})
+                checked_acts.append({**act, "minutes": adj_min, "kcal": adj_kcal,
+                                     "steps": adj_steps, "source": "plan"})
 
         if checked_acts:
             plan_total_kcal = sum(a["kcal"] for a in checked_acts)
@@ -448,21 +479,42 @@ with tab_e:
         for i, item in enumerate(st.session_state.parsed_exercises):
             ex_source = item.get("source", "db")
             ex_badge  = "🔵 AI추정" if ex_source == "ai_estimate" else ("🟡" if ex_source == "fallback" else "🟢")
+
+            ai_steps_possible = estimate_steps(
+                int(item.get("minutes", 30)),
+                item.get("activity_key"), item.get("name")
+            )
+            is_walk_ai = ai_steps_possible is not None
+
             ei1, ei2, ei3, ei4 = st.columns([3, 1.5, 1.5, 0.7])
             with ei1:
                 st.markdown(f"**{item['name']}** {ex_badge}")
                 st.caption(f"MET {item['met']:.1f}")
             with ei2:
-                new_min = st.number_input("분", min_value=5, max_value=300,
-                                          value=int(item["minutes"]), step=5,
-                                          key=f"ex_min_{i}", label_visibility="collapsed")
+                if is_walk_ai:
+                    default_s = ai_steps_possible or 3000
+                    new_steps = st.number_input("걸음수", min_value=100, max_value=50000,
+                                                value=int(default_s), step=500,
+                                                key=f"ex_steps_{i}", label_visibility="collapsed")
+                    new_min = steps_to_minutes(new_steps)
+                    new_kcal = steps_to_kcal(new_steps, current_w)
+                else:
+                    new_steps = None
+                    new_min = st.number_input("분", min_value=5, max_value=300,
+                                              value=int(item["minutes"]), step=5,
+                                              key=f"ex_min_{i}", label_visibility="collapsed")
+                    new_kcal = round(item["met"] * current_w * (new_min / 60.0), 1)
             with ei3:
-                new_kcal = round(item["met"] * current_w * (new_min / 60.0), 1)
+                if is_walk_ai:
+                    st.markdown(f"🦶 **{new_steps:,}**보")
+                    if new_steps >= 10000:
+                        st.caption("만보!")
                 st.markdown(f"**{new_kcal:.0f} kcal**")
             with ei4:
                 keep_ex = st.checkbox("", value=True, key=f"ex_keep_{i}")
             if keep_ex:
-                updated_ex.append({**item, "minutes": new_min, "kcal": new_kcal})
+                updated_ex.append({**item, "minutes": new_min, "kcal": new_kcal,
+                                   "steps": new_steps})
 
         if updated_ex:
             ex_totals = compute_exercise_totals(updated_ex)

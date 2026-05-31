@@ -4,7 +4,7 @@ Weekly plan page: targets, safety flags, goal trajectory, meal plan suggestion, 
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import date, timedelta
-from core.utils import today as _today
+from core.utils import today as _today, estimate_steps, steps_label
 import json
 
 from db.repo import (
@@ -315,7 +315,9 @@ with tab_ex:
     if selected_acts:
         st.markdown("**선택된 운동 세션 미리보기:**")
         for a in selected_acts:
-            st.markdown(f"- {a['name']} {a['minutes']}분 → **{a['kcal']:.0f} kcal**")
+            steps = estimate_steps(a["minutes"], a.get("activity_key"), a.get("name"))
+            step_txt = f"  {steps_label(steps)}" if steps else ""
+            st.markdown(f"- {a['name']} {a['minutes']}분 → **{a['kcal']:.0f} kcal**{step_txt}")
 
         if st.button("📥 이 운동 계획으로 저장", type="primary", use_container_width=True, key="save_ex_plan"):
             sessions_list = [
