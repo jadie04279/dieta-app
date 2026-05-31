@@ -54,6 +54,19 @@ actual_weight   = log.get("weight_kg")
 actual_intake   = log.get("intake_kcal")  or 0.0
 actual_exercise = log.get("exercise_kcal") or 0.0
 
+# 분석됐지만 아직 저장 안 된 식사·운동 결과를 상단 카드에 반영
+_pending_meals = st.session_state.get("parsed_meals", [])
+if _pending_meals:
+    _pending_kcal = sum(item.get("kcal", 0) for item in _pending_meals)
+    if _pending_kcal > actual_intake:
+        actual_intake = _pending_kcal
+
+_pending_ex = st.session_state.get("parsed_exercises", [])
+if _pending_ex:
+    _pending_ex_kcal = sum(item.get("kcal", 0) for item in _pending_ex)
+    if _pending_ex_kcal > actual_exercise:
+        actual_exercise = _pending_ex_kcal
+
 intake_pct   = min(100, actual_intake   / target_intake   * 100) if target_intake   > 0 else 0
 exercise_pct = min(100, actual_exercise / target_exercise * 100) if target_exercise > 0 else 0
 
@@ -70,6 +83,8 @@ intake_color  = "var(--danger)" if intake_pct >= 100 else ("var(--warning)" if i
 ex_color      = "var(--positive)" if exercise_pct >= 100 else ("var(--warning)" if exercise_pct >= 50 else "var(--danger)")
 intake_label  = f"+{actual_intake-target_intake:.0f} 초과" if actual_intake > target_intake else f"여유 {target_intake-actual_intake:.0f}"
 ex_label      = "목표 달성 🎉" if actual_exercise >= target_exercise else f"남은 {target_exercise-actual_exercise:.0f}"
+intake_pending_note  = " ✏️미저장" if _pending_meals and not log.get("intake_kcal") else ""
+ex_pending_note      = " ✏️미저장" if _pending_ex and not log.get("exercise_kcal") else ""
 
 st.markdown(f"""
 <div class="diet-card">
@@ -84,7 +99,7 @@ st.markdown(f"""
       <div style="margin-top:6px;background:var(--bg-elevated);border-radius:6px;height:7px;overflow:hidden">
         <div style="width:{intake_pct:.0f}%;background:{intake_color};height:100%;border-radius:6px"></div>
       </div>
-      <div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">{actual_intake:.0f} kcal &nbsp;<span style="color:{intake_color};font-weight:600">{intake_pct:.0f}% · {intake_label} kcal</span></div>
+      <div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">{actual_intake:.0f} kcal{intake_pending_note} &nbsp;<span style="color:{intake_color};font-weight:600">{intake_pct:.0f}% · {intake_label} kcal</span></div>
     </div>
     <div>
       <div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">🏃 운동 목표</div>
@@ -92,7 +107,7 @@ st.markdown(f"""
       <div style="margin-top:6px;background:var(--bg-elevated);border-radius:6px;height:7px;overflow:hidden">
         <div style="width:{exercise_pct:.0f}%;background:{ex_color};height:100%;border-radius:6px"></div>
       </div>
-      <div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">{actual_exercise:.0f} kcal &nbsp;<span style="color:{ex_color};font-weight:600">{exercise_pct:.0f}% · {ex_label} kcal</span></div>
+      <div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">{actual_exercise:.0f} kcal{ex_pending_note} &nbsp;<span style="color:{ex_color};font-weight:600">{exercise_pct:.0f}% · {ex_label} kcal</span></div>
     </div>
   </div>
 </div>
