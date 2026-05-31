@@ -1,7 +1,4 @@
-/* Diet Loop — Design token layer
-   Import via st.markdown('<style>@import url(assets/theme.css)</style>', unsafe_allow_html=True)
-   or inject via _inject_css() in app.py
-*/
+/* Diet Loop — Design token layer */
 
 :root {
   /* === Dark mode === */
