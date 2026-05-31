@@ -40,28 +40,6 @@
   --font-label:    13px;
 }
 
-/* === Light mode override === */
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg-base:       #F5F7FA;
-    --bg-card:       #FFFFFF;
-    --bg-hero:       #EEF2F7;
-    --bg-elevated:   #E8EDF4;
-
-    --text-primary:   #1A2330;
-    --text-secondary: #4A5568;
-    --text-tertiary:  #8A95A3;
-
-    --border:        rgba(0, 0, 0, 0.08);
-    --accent:        #2D8FDB;
-    --accent-dim:    rgba(45, 143, 219, 0.12);
-    --accent-text:   #1A72B8;
-
-    --positive:      #1A9E94;
-    --positive-dim:  rgba(26, 158, 148, 0.12);
-  }
-}
-
 /* === Base resets === */
 body {
   background-color: var(--bg-base) !important;
